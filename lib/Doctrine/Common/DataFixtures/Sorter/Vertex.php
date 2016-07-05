@@ -17,34 +17,42 @@
  * <http://www.doctrine-project.org>.
  */
 
-namespace Doctrine\Tests\Common\DataFixtures;
-
-use Doctrine\Common\DataFixtures\FixtureInterface;
-use Doctrine\Common\Persistence\ObjectManager;
+namespace Doctrine\Common\DataFixtures\Sorter;
 
 /**
- * Test Fixture interface.
+ * @author Marco Pivetta <ocramius@gmail.com>
  *
- * @author Jonathan H. Wage <jonwage@gmail.com>
+ * @internal this class is to be used only by data-fixtures internals: do not
+ *           rely on it in your own libraries/applications. This class is
+ *           designed to work with {@see \Doctrine\Common\DataFixtures\Sorter\TopologicalSorter}
+ *           only.
  */
-class FixtureTest extends BaseTest
+class Vertex
 {
-    public function testFixtureInterface()
+    const NOT_VISITED = 0;
+    const IN_PROGRESS = 1;
+    const VISITED     = 2;
+
+    /**
+     * @var int one of either {@see self::NOT_VISITED}, {@see self::IN_PROGRESS} or {@see self::VISITED}.
+     */
+    public $state = self::NOT_VISITED;
+
+    /**
+     * @var mixed Actual node value
+     */
+    public $value;
+
+    /**
+     * @var string[] Map of node dependencies defined as hashes.
+     */
+    public $dependencyList = [];
+
+    /**
+     * @param mixed $value
+     */
+    public function __construct($value)
     {
-        $em = $this->createMock(ObjectManager::class);
-        $fixture = new MyFixture2();
-        $fixture->load($em);
-
-        self::assertTrue($fixture->loaded);
-    }
-}
-
-class MyFixture2 implements FixtureInterface
-{
-    public $loaded = false;
-
-    public function load(ObjectManager $manager)
-    {
-        $this->loaded = true;
+        $this->value = $value;
     }
 }

@@ -1,4 +1,5 @@
 <?php
+
 /*
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
@@ -17,34 +18,27 @@
  * <http://www.doctrine-project.org>.
  */
 
-namespace Doctrine\Tests\Common\DataFixtures;
-
-use Doctrine\Common\DataFixtures\FixtureInterface;
-use Doctrine\Common\Persistence\ObjectManager;
+namespace Doctrine\Tests\Mock;
 
 /**
- * Test Fixture interface.
+ * Node.
  *
- * @author Jonathan H. Wage <jonwage@gmail.com>
+ * @author Guilherme Blanco <guilhermeblanco@hotmail.com>
  */
-class FixtureTest extends BaseTest
+class Node
 {
-    public function testFixtureInterface()
+    /**
+     * @var mixed
+     */
+    public $value;
+
+    /**
+     * Constructor.
+     *
+     * @param mixed $value
+     */
+    public function __construct($value)
     {
-        $em = $this->createMock(ObjectManager::class);
-        $fixture = new MyFixture2();
-        $fixture->load($em);
-
-        self::assertTrue($fixture->loaded);
-    }
-}
-
-class MyFixture2 implements FixtureInterface
-{
-    public $loaded = false;
-
-    public function load(ObjectManager $manager)
-    {
-        $this->loaded = true;
+        $this->value = $value;
     }
 }
