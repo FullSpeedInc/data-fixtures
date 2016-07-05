@@ -20,7 +20,7 @@
 namespace Doctrine\Common\DataFixtures\Purger;
 
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\Internal\CommitOrderCalculator;
+use Doctrine\Common\DataFixtures\Sorter\TopologicalSorter;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\DBAL\Platforms\AbstractPlatform;
 use Doctrine\DBAL\Platforms\MySqlPlatform;
@@ -102,9 +102,8 @@ class ORMPurger implements PurgerInterface
     public function purge()
     {
         $classes = array();
-        $metadatas = $this->em->getMetadataFactory()->getAllMetadata();
 
-        foreach ($metadatas as $metadata) {
+        foreach ($this->em->getMetadataFactory()->getAllMetadata() as $metadata) {
             if (! $metadata->isMappedSuperclass && ! (isset($metadata->isEmbeddedClass) && $metadata->isEmbeddedClass)) {
                 $classes[] = $metadata;
             }
@@ -123,9 +122,9 @@ class ORMPurger implements PurgerInterface
             $class = $commitOrder[$i];
 
             if (
-                ($class->isInheritanceTypeSingleTable() && $class->name != $class->rootEntityName) ||
                 (isset($class->isEmbeddedClass) && $class->isEmbeddedClass) ||
-                $class->isMappedSuperclass
+                $class->isMappedSuperclass ||
+                ($class->isInheritanceTypeSingleTable() && $class->name !== $class->rootEntityName)
             ) {
                 continue;
             }
@@ -139,8 +138,7 @@ class ORMPurger implements PurgerInterface
         }
         foreach($orderedTables as $tbl) {
             if ($this->purgeMode === self::PURGE_MODE_DELETE) {
-                $tbl = $connection->quoteIdentifier($tbl);
-                $connection->executeUpdate('DELETE FROM ' . $tbl );
+                $connection->executeUpdate('DELETE FROM ' . $tbl);
             } else {
                 $connection->executeUpdate($platform->getTruncateTableSQL($tbl, true));
             }
@@ -150,50 +148,60 @@ class ORMPurger implements PurgerInterface
         }
     }
 
+    /**
+     * @param EntityManagerInterface $em
+     * @param ClassMetadata[]        $classes
+     *
+     * @return ClassMetadata[]
+     */
     private function getCommitOrder(EntityManagerInterface $em, array $classes)
     {
-        $calc = new CommitOrderCalculator;
+        $sorter = new TopologicalSorter();
 
         foreach ($classes as $class) {
-            $calc->addClass($class);
+            $sorter->addNode($class->name, $class);
 
             // $class before its parents
             foreach ($class->parentClasses as $parentClass) {
-                $parentClass = $em->getClassMetadata($parentClass);
+                $parentClass     = $em->getClassMetadata($parentClass);
+                $parentClassName = $parentClass->getName();
 
-                if ( ! $calc->hasClass($parentClass->name)) {
-                    $calc->addClass($parentClass);
+                if ( ! $sorter->hasNode($parentClassName)) {
+                    $sorter->addNode($parentClassName, $parentClass);
                 }
 
-                $calc->addDependency($class, $parentClass);
+                $sorter->addDependency($class->name, $parentClassName);
             }
 
             foreach ($class->associationMappings as $assoc) {
                 if ($assoc['isOwningSide']) {
-                    $targetClass = $em->getClassMetadata($assoc['targetEntity']);
+                    /* @var $targetClass ClassMetadata */
+                    $targetClass     = $em->getClassMetadata($assoc['targetEntity']);
+                    $targetClassName = $targetClass->getName();
 
-                    if ( ! $calc->hasClass($targetClass->name)) {
-                        $calc->addClass($targetClass);
+                    if ( ! $sorter->hasNode($targetClassName)) {
+                        $sorter->addNode($targetClassName, $targetClass);
                     }
 
                     // add dependency ($targetClass before $class)
-                    $calc->addDependency($targetClass, $class);
+                    $sorter->addDependency($targetClassName, $class->name);
 
                     // parents of $targetClass before $class, too
                     foreach ($targetClass->parentClasses as $parentClass) {
-                        $parentClass = $em->getClassMetadata($parentClass);
+                        $parentClass     = $em->getClassMetadata($parentClass);
+                        $parentClassName = $parentClass->getName();
 
-                        if ( ! $calc->hasClass($parentClass->name)) {
-                            $calc->addClass($parentClass);
+                        if ( ! $sorter->hasNode($parentClassName)) {
+                            $sorter->addNode($parentClassName, $parentClass);
                         }
 
-                        $calc->addDependency($parentClass, $class);
+                        $sorter->addDependency($parentClassName, $class->name);
                     }
                 }
             }
         }
 
-        return $calc->getCommitOrder();
+        return $sorter->sort();
     }
 
     /**
